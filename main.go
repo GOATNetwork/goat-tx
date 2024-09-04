@@ -7,7 +7,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/codec/types"
+	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 	"google.golang.org/grpc"
@@ -15,9 +16,9 @@ import (
 )
 
 func main() {
-	// Connect to the gRPC server
-	grpcConn, err := grpc.NewClient(
-		"localhost:9090", // Replace with the actual gRPC server address
+	// Connect to gRPC server
+	grpcConn, err := grpc.Dial(
+		"localhost:9090", // Replace with actual gRPC server address
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -25,13 +26,14 @@ func main() {
 	}
 	defer grpcConn.Close()
 
-	interfaceRegistry := codectypes.NewInterfaceRegistry()
-	marshaler := codec.NewProtoCodec(interfaceRegistry)
+	// Initialize TxConfig
+	encodingConfig := makeEncodingConfig()
 
 	clientCtx := client.Context{}.
 		WithGRPCClient(grpcConn).
-		WithCodec(marshaler).
-		WithChainID("goat-testnet-1") // Replace with the actual chain ID
+		WithCodec(encodingConfig.Codec).
+		WithTxConfig(encodingConfig.TxConfig).
+		WithChainID("goat-testnet-1") // Replace with actual chain ID
 
 	// Create MsgBlockHeader message
 	msg := &bitcointypes.MsgNewBlockHashes{
@@ -52,7 +54,8 @@ func main() {
 		WithGas(200000).
 		WithFees("1000ugoat").
 		WithKeybase(clientCtx.Keyring).
-		WithAccountRetriever(clientCtx.AccountRetriever)
+		WithAccountRetriever(clientCtx.AccountRetriever).
+		WithTxConfig(encodingConfig.TxConfig)
 
 	// Sign transaction
 	txBuilder, err := txFactory.BuildUnsignedTx(msg)
@@ -78,4 +81,21 @@ func main() {
 	}
 
 	log.Printf("Transaction successfully broadcasted: %s", res.TxHash)
+}
+
+func makeEncodingConfig() EncodingConfig {
+	interfaceRegistry := types.NewInterfaceRegistry()
+	marshaler := codec.NewProtoCodec(interfaceRegistry)
+
+	return EncodingConfig{
+		InterfaceRegistry: interfaceRegistry,
+		Codec:             marshaler,
+		TxConfig:          authtx.NewTxConfig(marshaler, authtx.DefaultSignModes),
+	}
+}
+
+type EncodingConfig struct {
+	InterfaceRegistry types.InterfaceRegistry
+	Codec             codec.Codec
+	TxConfig          client.TxConfig
 }

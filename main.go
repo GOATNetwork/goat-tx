@@ -8,6 +8,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
@@ -29,11 +30,24 @@ func main() {
 	// Initialize TxConfig
 	encodingConfig := makeEncodingConfig()
 
+	// Initialize keyring
+	kr, err := keyring.New(
+		"goat",
+		keyring.BackendTest,
+		"~/.goat",
+		nil,
+		encodingConfig.Codec,
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize keyring: %v", err)
+	}
+
 	clientCtx := client.Context{}.
 		WithGRPCClient(grpcConn).
 		WithCodec(encodingConfig.Codec).
 		WithTxConfig(encodingConfig.TxConfig).
-		WithChainID("goat-testnet-1") // Replace with actual chain ID
+		WithKeyring(kr).
+		WithChainID("48815") // Replace with actual chain ID
 
 	// Create MsgBlockHeader message
 	msg := &bitcointypes.MsgNewBlockHashes{
@@ -53,7 +67,7 @@ func main() {
 		WithChainID(clientCtx.ChainID).
 		WithGas(200000).
 		WithFees("1000ugoat").
-		WithKeybase(clientCtx.Keyring).
+		WithKeybase(kr).
 		WithAccountRetriever(clientCtx.AccountRetriever).
 		WithTxConfig(encodingConfig.TxConfig)
 
@@ -63,7 +77,8 @@ func main() {
 		log.Fatalf("Failed to build transaction: %v", err)
 	}
 
-	err = tx.Sign(context.Background(), txFactory, "your_key_name", txBuilder, true) // Replace with your key name
+	keyName := "your_key_name"
+	err = tx.Sign(context.Background(), txFactory, keyName, txBuilder, true)
 	if err != nil {
 		log.Fatalf("Failed to sign transaction: %v", err)
 	}
